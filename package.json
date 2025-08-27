@@ -1,0 +1,9 @@
+{
+  "name": "pdf-sentence-extractor",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@google/genai": "^0.24.1"
+  }
+}
