@@ -42,10 +42,15 @@
                 <label for="pdf-upload" class="sr-only">PDF 파일 업로드</label>
                 <input id="pdf-upload" name="pdf" type="file" accept=".pdf" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition">
             </div>
-            <button id="extract-btn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:bg-indigo-300">
-                <svg id="btn-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M2.5 17a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1Z"></path><path d="M6.5 17a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1Z"></path><path d="M10.5 17a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1Z"></path></svg>
-                <span id="btn-text">문장 추출하기</span>
-            </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button id="extract-btn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:bg-indigo-300">
+                    <svg id="btn-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M2.5 17a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1Z"></path><path d="M6.5 17a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1Z"></path><path d="M10.5 17a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1Z"></path></svg>
+                    <span id="btn-text">문장 추출하기</span>
+                </button>
+                <button id="scramble-btn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:bg-gray-200 disabled:text-gray-500" disabled>
+                    문장 섞기 (Scramble)
+                </button>
+            </div>
         </div>
         
         <!-- 결과 표시 영역 -->
@@ -56,11 +61,18 @@
             </div>
             <div id="result-container" class="text-left text-gray-800"></div>
         </div>
+
+        <!-- 섞은 문장 표시 영역 -->
+        <div class="mt-6 p-6 border border-gray-200 rounded-lg bg-gray-50 min-h-[120px]">
+            <p class="text-sm text-gray-600 mb-3">[문장 섞기]를 누르면 아래에 섞은 문장이 표시됩니다.</p>
+            <div id="scrambled-container" class="text-left text-gray-800"></div>
+        </div>
     </div>
 
     <script type="module">
         // Gemini API 라이브러리를 가져옵니다.
-        import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
+        // 불필요: 클라이언트에서 Gemini 직접 호출하지 않음
+        // import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 
         // HTML 요소들을 변수에 할당합니다.
         const extractBtn = document.getElementById('extract-btn');
@@ -70,6 +82,62 @@
         const loader = document.getElementById('loader');
         const statusText = document.getElementById('status-text');
         const btnText = document.getElementById('btn-text');
+        const scrambleBtn = document.getElementById('scramble-btn');
+        const scrambledContainer = document.getElementById('scrambled-container');
+
+        // 상태: 마지막으로 추출된 문장들
+        let lastExtractedSentences = [];
+
+        // 유틸: Fisher-Yates 셔플
+        function shuffleArray(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        // 유틸: 문장 단어 무작위 섞기
+        function scrambleSentence(sentence) {
+            if (!sentence) return '';
+            // 앞/뒤 따옴표 등 최소 보존
+            const prefixMatch = sentence.match(/^(["'“‘(\[]*)/);
+            const suffixMatch = sentence.match(/(["'”’)\]]*)$/);
+            const prefix = prefixMatch ? prefixMatch[1] : '';
+            const suffix = suffixMatch ? suffixMatch[1] : '';
+
+            // 끝의 마침표/물음표/느낌표 묶음 보존
+            const endPuncMatch = sentence.replace(prefix, '').replace(suffix, '').match(/([.!?]+)\s*$/);
+            const endPunc = endPuncMatch ? endPuncMatch[1] : '';
+
+            // 본문 텍스트 추출(양끝 불필요 문자 제거)
+            let core = sentence.trim();
+            if (prefix) core = core.slice(prefix.length);
+            if (suffix) core = core.slice(0, core.length - suffix.length);
+            if (endPunc) core = core.replace(new RegExp(`[${endPunc.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}]\s*$`), '');
+
+            // 쉼표/세미콜론 등은 제거하여 단어만 섞음
+            core = core.replace(/[,:;]+/g, ' ');
+            const words = core.split(/\s+/).filter(Boolean);
+            if (words.length <= 1) return sentence; // 한 단어면 그대로
+
+            const shuffled = shuffleArray(words);
+            const scrambled = `${prefix}${shuffled.join(' ')}${endPunc}${suffix}`.trim();
+            return scrambled;
+        }
+
+        // 섞기 버튼 클릭 이벤트
+        scrambleBtn.addEventListener('click', () => {
+            if (!lastExtractedSentences.length) {
+                scrambledContainer.innerHTML = '<p class="text-gray-600">먼저 문장을 추출한 뒤 섞어주세요.</p>';
+                return;
+            }
+            const scrambled = lastExtractedSentences.map(scrambleSentence);
+            scrambledContainer.innerHTML = scrambled
+                .map((s, idx) => `<p><strong>문장${idx + 1}.</strong> ${s.trim()}</p>`)
+                .join('');
+        });
         
 
         // '문장 추출하기' 버튼 클릭 이벤트 리스너
@@ -84,8 +152,10 @@
             loader.classList.remove('hidden');
             statusText.textContent = 'PDF 파일을 분석 중입니다...';
             resultContainer.innerHTML = '';
+            scrambledContainer.innerHTML = '';
             extractBtn.disabled = true;
             btnText.textContent = '추출 중...';
+            scrambleBtn.disabled = true;
             
             try {
                 const fileReader = new FileReader();
@@ -131,11 +201,16 @@
                         // 결과를 화면에 표시합니다.
                         if (englishSentences.length > 0) {
                             resultContainer.innerHTML = englishSentences
-                                .map((sentence, index) => `<p><strong>문장 ${index + 1}:</strong> ${sentence.trim()}</p>`)
+                                .map((sentence, index) => `<p><strong>문장${index + 1}.</strong> ${sentence.trim()}</p>`)
                                 .join('');
                             statusText.textContent = `총 ${englishSentences.length}개의 영어 문장을 찾았습니다.`;
+                            // 상태 업데이트 및 섞기 버튼 활성화
+                            lastExtractedSentences = englishSentences;
+                            scrambleBtn.disabled = false;
                         } else {
                             statusText.textContent = 'AI가 PDF에서 완전한 영어 문장을 찾지 못했습니다.';
+                            lastExtractedSentences = [];
+                            scrambleBtn.disabled = true;
                         }
 
                     } catch (err) {
