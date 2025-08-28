@@ -94,6 +94,11 @@
         // 상태: 마지막으로 추출된 문장들
         let lastExtractedSentences = [];
 
+        // 유틸: 서버가 "문장1. ..." 형태로 보낸 경우 번호 제거
+        function stripKoreanNumbering(line) {
+            return (line || '').replace(/^\s*문장\s*\d+\.?\s*/i, '').trim();
+        }
+
         // 유틸: Fisher-Yates 셔플
         function shuffleArray(arr) {
             const a = arr.slice();
@@ -202,7 +207,9 @@
                         const aiResponseText = data.sentences; // 서버리스 함수가 보내준 결과
 
                         // API 응답을 줄바꿈 기준으로 나누어 문장 배열 생성
-                        const englishSentences = aiResponseText.split('\n').filter(s => s.trim() !== '');
+                        const rawLines = aiResponseText.split('\n').filter(s => s.trim() !== '');
+                        // 서버에서 번호를 붙여 보낼 수 있으므로 내부 상태는 번호 제거
+                        const englishSentences = rawLines.map(stripKoreanNumbering).filter(Boolean);
 
                         // 결과를 화면에 표시합니다.
                         if (englishSentences.length > 0) {
