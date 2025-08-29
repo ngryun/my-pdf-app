@@ -49,7 +49,7 @@
         <div class="space-y-4">
             <div>
                 <label for="pdf-upload" class="sr-only">PDF 파일 업로드</label>
-                <input id="pdf-upload" name="pdf" type="file" accept=".pdf,.hwpx" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition">
+                <input id="pdf-upload" name="pdf" type="file" accept=".pdf,.hwpx,.hwp" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition">
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button id="extract-btn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:bg-indigo-300">
@@ -213,18 +213,72 @@
             xmlNames.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
             const parser = new DOMParser();
+
+            function isExcludedElementName(name) {
+                const n = (name || '').toLowerCase();
+                // 네임스페이스 접두어 제거 후도 검사
+                const base = n.includes(':') ? n.split(':')[1] : n;
+                const hay = `${n} ${base}`;
+                return (
+                    /header|footer/.test(hay) ||
+                    /(foot|end)note/.test(hay) ||
+                    /comment|annotation/.test(hay) ||
+                    /meta|head/.test(hay) ||
+                    /tblof|toc/.test(hay)
+                );
+            }
+
+            function isLikelyTextParent(name) {
+                const n = (name || '').toLowerCase();
+                const base = n.includes(':') ? n.split(':')[1] : n;
+                const hay = `${n} ${base}`;
+                return /(^|\b)(p|para|run|text|span|t|char|line)(\b|$)/.test(hay);
+            }
+
+            function collectFilteredText(doc) {
+                const parts = [];
+                const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_TEXT, {
+                    acceptNode(node) {
+                        const raw = (node.nodeValue || '').replace(/[\s\u00A0]+/g, ' ').trim();
+                        if (!raw) return NodeFilter.FILTER_REJECT;
+                        // 제외 영역에 속하는지 확인
+                        let el = node.parentNode;
+                        let hasTextParent = false;
+                        while (el && el.nodeType === 1) {
+                            const tag = el.tagName || '';
+                            if (isExcludedElementName(tag)) {
+                                return NodeFilter.FILTER_REJECT;
+                            }
+                            if (!hasTextParent && isLikelyTextParent(tag)) {
+                                hasTextParent = true;
+                            }
+                            el = el.parentNode;
+                        }
+                        // 문단/러닝텍스트 하위가 아니면 비중 낮게 취급 — 허용은 하되 후처리에서 줄바꿈 없이 결합
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                });
+                let node;
+                while ((node = walker.nextNode())) {
+                    const txt = (node.nodeValue || '').replace(/[\s\u00A0]+/g, ' ').trim();
+                    if (txt) parts.push(txt);
+                }
+                // 문장 경계를 살리기 위해 공백 합치고 과도한 공백 제거
+                return parts.join(' ').replace(/\s+/g, ' ').trim();
+            }
+
             const texts = [];
             for (let i = 0; i < xmlNames.length; i++) {
                 const name = xmlNames[i];
                 statusText.textContent = `HWPX XML 읽는 중... (${i + 1}/${xmlNames.length})`;
                 const xmlString = await zip.file(name).async('text');
                 const doc = parser.parseFromString(xmlString, 'text/xml');
-                // 모든 텍스트 노드 합치기
-                const txt = (doc && doc.documentElement && doc.documentElement.textContent) ? doc.documentElement.textContent : '';
-                if (txt && txt.trim()) texts.push(txt);
+                if (!doc || !doc.documentElement) continue;
+                // 본문 위주로 텍스트 수집
+                const filtered = collectFilteredText(doc);
+                if (filtered) texts.push(filtered);
             }
 
-            // 공백 정리
             return texts.join(' ').replace(/\s+/g, ' ').trim();
         }
 
@@ -232,7 +286,7 @@
         extractBtn.addEventListener('click', async () => {
             const file = pdfUpload.files[0];
             if (!file) {
-                statusText.textContent = '먼저 파일을 선택해주세요. (PDF 또는 HWPX)';
+                statusText.textContent = '먼저 파일을 선택해주세요. (PDF/HWPX)';
                 return;
             }
 
@@ -254,7 +308,15 @@
                         const name = (file.name || '').toLowerCase();
                         let allText = '';
 
-                        if (name.endsWith('.pdf')) {
+                        if (name.endsWith('.hwp')) {
+                            loader.classList.add('hidden');
+                            extractBtn.disabled = false;
+                            btnText.textContent = '문장 추출하기';
+                            statusText.textContent = '현재 .hwp(구형) 형식은 브라우저에서 직접 처리할 수 없습니다. HWPX 또는 PDF로 변환 후 업로드해주세요.';
+                            // 기본 입력 라인 제공
+                            if (!resultContainer.children.length) renderSentenceInputs(['', '', '', '', '', '']);
+                            return;
+                        } else if (name.endsWith('.pdf')) {
                             const typedarray = new Uint8Array(arrayBuffer);
                             const pdf = await pdfjsLib.getDocument(typedarray).promise;
                             for (let i = 1; i <= pdf.numPages; i++) {
