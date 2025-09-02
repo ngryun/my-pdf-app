@@ -49,11 +49,7 @@
         <div class="space-y-4">
             <div class="space-y-2">
                 <label for="pdf-upload" class="sr-only">PDF 파일 업로드</label>
-                <input id="pdf-upload" name="pdf" type="file" accept=".pdf,.hwpx,.hwp" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition">
-                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <input id="hwp-convert-toggle" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                  <span>.hwp 자동 변환 사용(beta)</span>
-                </label>
+                <input id="pdf-upload" name="pdf" type="file" accept=".pdf,.hwpx" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition">
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button id="extract-btn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:bg-indigo-300">
@@ -105,7 +101,6 @@
         const btnText = document.getElementById('btn-text');
         const scrambleBtn = document.getElementById('scramble-btn');
         const scrambledContainer = document.getElementById('scrambled-container');
-        const hwpConvertToggle = document.getElementById('hwp-convert-toggle');
 
         // 상태: 마지막으로 추출된 문장들
         let lastExtractedSentences = [];
@@ -313,35 +308,7 @@
                         const name = (file.name || '').toLowerCase();
                         let allText = '';
 
-                        if (name.endsWith('.hwp')) {
-                            if (hwpConvertToggle && hwpConvertToggle.checked) {
-                                statusText.textContent = '서버에서 .hwp를 변환 중입니다...';
-                                // 파일을 Base64로 변환하여 서버리스 함수에 전달
-                                const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                                const convRes = await fetch('/.netlify/functions/convertHwp', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ filename: file.name, fileBase64: base64 })
-                                });
-                                if (!convRes.ok) {
-                                    const errText = await convRes.text();
-                                    throw new Error(`.hwp 변환 실패: ${errText || convRes.status}`);
-                                }
-                                const convData = await convRes.json();
-                                let convertedText = convData && convData.text ? String(convData.text) : '';
-                                if (!convertedText.trim()) {
-                                    throw new Error('변환 결과가 비어 있습니다.');
-                                }
-                                allText = convertedText;
-                            } else {
-                                loader.classList.add('hidden');
-                                extractBtn.disabled = false;
-                                btnText.textContent = '문장 추출하기';
-                                statusText.textContent = '현재 .hwp(구형)는 브라우저에서 직접 처리 불가합니다. HWPX/PDF로 변환하거나 상단 토글로 자동 변환을 켜주세요.';
-                                if (!resultContainer.children.length) renderSentenceInputs(['', '', '', '', '', '']);
-                                return;
-                            }
-                        } else if (name.endsWith('.pdf')) {
+                        if (name.endsWith('.pdf')) {
                             const typedarray = new Uint8Array(arrayBuffer);
                             const pdf = await pdfjsLib.getDocument(typedarray).promise;
                             for (let i = 1; i <= pdf.numPages; i++) {
